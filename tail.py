@@ -46,3 +46,30 @@ class Tail:
             res = self.br_lookup[prefix].format(res)
 
         return f'.{escape_css_class_name(class_)}{{{res}}}'
+
+
+class Tails:
+    def __init__(self, *tails: Tail) -> None:
+        # NOTE: longer prefixes are by definition more specific
+        # and prefixes with the same length cannot overlap
+        #
+        # NOTE: also note that if we just self.tails.append(...)
+        # it will not be sorted!
+        self.tails = sorted(tails, key=lambda x: len(x.prefix), reverse=True)
+
+    def generate_css(self, *classes: str) -> str:
+        css: list[str] = []
+
+        # TODO: sort classes
+        sorted_classes = sorted(set(classes), key=lambda x: x)
+
+        for class_ in sorted_classes:
+            for tail in self.tails:
+                if class_.startswith(tail.prefix):
+                    try:
+                        css.append(tail.generate_css(class_))
+                    except KeyError:
+                        pass
+                    break
+
+        return '\n'.join(css)
