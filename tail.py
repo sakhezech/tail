@@ -49,9 +49,8 @@ class Tail:
                     return multi_format(self.lookup[namespace], table[key])
         raise ValueError(f'class not valid: {class_}')
 
-    def generate_css(self, class_: str) -> str:
-        *prefixes, class_name = class_.split(':')
-        inner = self.generate_inner_css(class_name)
+    def generate_css(self, class_: str, prefixes: list[str]) -> str:
+        inner = self.generate_inner_css(class_)
         res = inner
         for prefix in reversed(prefixes):
             res = self.br_lookup[prefix].format(res)
@@ -71,14 +70,19 @@ class Tails:
     def generate_css(self, *classes: str) -> str:
         css: list[str] = []
 
-        # TODO: sort classes
-        sorted_classes = sorted(set(classes), key=lambda x: x)
+        processed = []
+        for unstripped_class in classes:
+            *prefixes, class_ = unstripped_class.split(':')
+            processed.append((class_, prefixes))
 
-        for class_ in sorted_classes:
+        # TODO: sort classes
+        processed.sort(key=lambda x: x)
+
+        for class_, prefixes in processed:
             for tail in self.tails:
                 if class_.startswith(tail.prefix):
                     try:
-                        css.append(tail.generate_css(class_))
+                        css.append(tail.generate_css(class_, prefixes))
                     except ValueError:
                         pass
                     break
