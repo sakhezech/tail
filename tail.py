@@ -2,7 +2,13 @@ import re
 
 
 def escape_css_class_name(string: str) -> str:
-    return string.replace('/', r'\/').replace(':', r'\:')
+    # TODO: replace with a better escaping function
+    return (
+        string.replace('/', r'\/')
+        .replace(':', r'\:')
+        .replace('[', r'\[')
+        .replace(']', r'\]')
+    )
 
 
 class Tail:
