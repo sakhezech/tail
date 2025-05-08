@@ -24,7 +24,9 @@ class Tail:
 
     def generate_inner_css(self, class_: str) -> str:
         key = class_.removeprefix(self.prefix)
-        if '[<value>]' in self.lookup and (m := re.match(r'\[(.*)\]', key)):
+        if key in self.lookup:
+            return self.lookup[key]
+        elif '[<value>]' in self.lookup and (m := re.match(r'\[(.*)\]', key)):
             val = m.group(1)
             return multi_format(self.lookup['[<value>]'], val)
         elif '(<custom-property>)' in self.lookup and (
@@ -45,7 +47,7 @@ class Tail:
             for namespace, table in self.variables.items():
                 if namespace in self.lookup and key in table:
                     return multi_format(self.lookup[namespace], table[key])
-        return self.lookup[key]
+        raise ValueError(f'class not valid: {class_}')
 
     def generate_css(self, class_: str) -> str:
         *prefixes, class_name = class_.split(':')
@@ -77,7 +79,7 @@ class Tails:
                 if class_.startswith(tail.prefix):
                     try:
                         css.append(tail.generate_css(class_))
-                    except KeyError:
+                    except ValueError:
                         pass
                     break
 
