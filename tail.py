@@ -1,10 +1,6 @@
 import re
 
 
-def multi_format(string: str, value: str) -> str:
-    return string.format(*[value for _ in range(string.count('{}'))])
-
-
 def escape_css_class_name(string: str) -> str:
     return string.replace('/', r'\/').replace(':', r'\:')
 
@@ -28,25 +24,29 @@ class Tail:
             return self.lookup[key]
         elif '[<value>]' in self.lookup and (m := re.match(r'\[(.*)\]', key)):
             val = m.group(1)
-            return multi_format(self.lookup['[<value>]'], val)
+            return self.lookup['[<value>]'].replace('<value>', val)
         elif '(<custom-property>)' in self.lookup and (
             m := re.match(r'\((.*)\)', key)
         ):
             val = m.group(1)
-            return multi_format(self.lookup['(<custom-property>)'], val)
+            return self.lookup['(<custom-property>)'].replace(
+                '<custom-property>', val
+            )
         elif '<ratio>' in self.lookup and (m := re.match(r'\d+/\d+', key)):
             val = m.group(0)
-            return multi_format(self.lookup['<ratio>'], val)
+            return self.lookup['<ratio>'].replace('<ratio>', val)
         elif '<fraction>' in self.lookup and (m := re.match(r'\d+/\d+', key)):
             val = m.group(0)
-            return multi_format(self.lookup['<fraction>'], val)
+            return self.lookup['<fraction>'].replace('<fraction>', val)
         elif '<number>' in self.lookup and (m := re.match(r'\d+', key)):
             val = m.group(0)
-            return multi_format(self.lookup['<number>'], val)
+            return self.lookup['<number>'].replace('<number>', val)
         else:
             for namespace, table in self.variables.items():
                 if namespace in self.lookup and key in table:
-                    return multi_format(self.lookup[namespace], table[key])
+                    return self.lookup[namespace].replace(
+                        namespace, table[key]
+                    )
         raise ValueError(f'class not valid: {class_}')
 
     def generate_css(self, class_: str, prefixes: list[str]) -> str:
