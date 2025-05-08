@@ -11,11 +11,16 @@ def escape_css_class_name(string: str) -> str:
 
 class Tail:
     def __init__(
-        self, prefix: str, lookup: dict[str, str], br_lookup: dict[str, str]
+        self,
+        prefix: str,
+        lookup: dict[str, str],
+        br_lookup: dict[str, str],
+        variables: dict[str, dict[str, str]],
     ) -> None:
         self.prefix = prefix
         self.lookup = lookup
         self.br_lookup = br_lookup
+        self.variables = variables
 
     def generate_inner_css(self, class_: str) -> str:
         key = class_.removeprefix(self.prefix)
@@ -36,6 +41,10 @@ class Tail:
         elif '<number>' in self.lookup and (m := re.match(r'\d+', key)):
             val = m.group(0)
             return multi_format(self.lookup['<number>'], val)
+        else:
+            for namespace, table in self.variables.items():
+                if namespace in self.lookup and key in table:
+                    return multi_format(self.lookup[namespace], table[key])
         return self.lookup[key]
 
     def generate_css(self, class_: str) -> str:
