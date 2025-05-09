@@ -16,11 +16,11 @@ def escape_css_class_name(string: str) -> str:
 class Tail:
     def __init__(
         self,
-        lookup: dict[str, str],
+        patterns: dict[str, str],
         variants: dict[str, str],
         variables: dict[str, dict[str, str]],
     ) -> None:
-        self.lookup = lookup
+        self.patterns = patterns
         self.variants = variants
         self.variables = variables
 
@@ -88,7 +88,7 @@ class Tail:
         return None
 
     def generate_inner_css(self, class_: str) -> str:
-        if css := self.resolve_string(class_, self.lookup):
+        if css := self.resolve_string(class_, self.patterns):
             return css
         raise ValueError(f'class not valid: {class_}')
 
