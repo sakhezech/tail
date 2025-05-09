@@ -102,7 +102,7 @@ class Tail:
         css: list[str] = []
 
         classes_: list[tuple[str, str, list[str]]] = []
-        for unstripped_class in classes:
+        for unstripped_class in set(classes):
             *prefixes, class_ = unstripped_class.split(':')
             classes_.append((class_, unstripped_class, prefixes))
         # TODO: sort classes
