@@ -8,92 +8,86 @@ def escape_css_class_name(string: str) -> str:
         .replace(':', r'\:')
         .replace('[', r'\[')
         .replace(']', r'\]')
+        .replace('(', r'\(')
+        .replace(')', r'\)')
     )
 
 
 class Tail:
     def __init__(
         self,
-        prefix: str,
         lookup: dict[str, str],
         br_lookup: dict[str, str],
         variables: dict[str, dict[str, str]],
     ) -> None:
-        self.prefix = prefix
         self.lookup = lookup
         self.br_lookup = br_lookup
         self.variables = variables
 
+        self.special: list[tuple[str, str, tuple[str, ...] | None]] = [
+            # TODO: angle
+            ('[<value>]', r'\[(.*)\]$', ('<value>',)),
+            ('(<custom-property>)', r'\((.*)\)$', ('<custom-property>',)),
+            ('<ratio>', r'(\d+/\d+)$', None),
+            ('<fraction>', r'(\d+/\d+)$', None),
+            ('<number>', r'(\d+)$', ('<number>', '<value>')),
+            ('<percentage>', r'(\d+%)$', None),
+        ]
+
     def generate_inner_css(self, class_: str) -> str:
-        key = class_.removeprefix(self.prefix)
-        if key in self.lookup:
-            return self.lookup[key]
-        elif '[<value>]' in self.lookup and (m := re.match(r'\[(.*)\]', key)):
-            val = m.group(1)
-            return self.lookup['[<value>]'].replace('<value>', val)
-        elif '(<custom-property>)' in self.lookup and (
-            m := re.match(r'\((.*)\)', key)
-        ):
-            val = m.group(1)
-            return self.lookup['(<custom-property>)'].replace(
-                '<custom-property>', val
-            )
-        elif '<ratio>' in self.lookup and (m := re.match(r'\d+/\d+', key)):
-            val = m.group(0)
-            return self.lookup['<ratio>'].replace('<ratio>', val)
-        elif '<fraction>' in self.lookup and (m := re.match(r'\d+/\d+', key)):
-            val = m.group(0)
-            return self.lookup['<fraction>'].replace('<fraction>', val)
-        elif '<number>' in self.lookup and (m := re.match(r'\d+', key)):
-            val = m.group(0)
-            return self.lookup['<number>'].replace('<number>', val)
-        elif '<percentage>' in self.lookup and (m := re.match(r'\d+%', key)):
-            val = m.group(0)
-            return self.lookup['<percentage>'].replace('<percentage>', val)
-        else:
-            for namespace, table in self.variables.items():
-                if namespace in self.lookup and key in table:
-                    return self.lookup[namespace].replace(
-                        namespace, table[key]
-                    )
+        if class_ in self.lookup:
+            return self.lookup[class_]
+
+        for key, regex, rep_keys in self.special:
+            if m := re.search(regex, class_):
+                lookup_class = re.sub(regex, key, class_)
+                if lookup_class in self.lookup:
+                    if not rep_keys:
+                        rep_keys = (key,)
+                    res = self.lookup[lookup_class]
+                    for k in rep_keys:
+                        res = res.replace(k, m.group(1))
+                    return res
+
+        for namespace, var_table in self.variables.items():
+            for lookup_key, template in self.lookup.items():
+                if namespace not in lookup_key:
+                    continue
+
+                # A
+                my_regex = lookup_key.replace(namespace, r'(.*)')
+                m = re.match(my_regex, class_)
+                if not m:
+                    continue
+                variable_nam = m.group(1)
+                if variable_nam in var_table:
+                    return template.replace(namespace, var_table[variable_nam])
+
+                # B
+                # for val_name, var_value in var_table.items():
+                #     if lookup_key.replace(namespace, val_name) == class_:
+                #         return template.replace(namespace, var_value)
+
         raise ValueError(f'class not valid: {class_}')
-
-    def generate_css(self, class_: str, prefixes: list[str]) -> str:
-        inner = self.generate_inner_css(class_)
-        res = inner
-        for prefix in reversed(prefixes):
-            res = self.br_lookup[prefix].format(res)
-
-        return f'.{escape_css_class_name(class_)}{{{res}}}'
-
-
-class Tails:
-    def __init__(self, *tails: Tail) -> None:
-        # NOTE: longer prefixes are by definition more specific
-        # and prefixes with the same length cannot overlap
-        #
-        # NOTE: also note that if we just self.tails.append(...)
-        # it will not be sorted!
-        self.tails = sorted(tails, key=lambda x: len(x.prefix), reverse=True)
 
     def generate_css(self, *classes: str) -> str:
         css: list[str] = []
 
-        processed = []
+        classes_: list[tuple[str, str, list[str]]] = []
         for unstripped_class in classes:
             *prefixes, class_ = unstripped_class.split(':')
-            processed.append((class_, prefixes))
-
+            classes_.append((class_, unstripped_class, prefixes))
         # TODO: sort classes
-        processed.sort(key=lambda x: x)
+        classes_.sort(key=lambda x: x)
 
-        for class_, prefixes in processed:
-            for tail in self.tails:
-                if class_.startswith(tail.prefix):
-                    try:
-                        css.append(tail.generate_css(class_, prefixes))
-                    except ValueError:
-                        pass
-                    break
+        for class_, full_class, prefixes in classes_:
+            try:
+                inner = self.generate_inner_css(class_)
+                res = inner
+                for prefix in reversed(prefixes):
+                    res = self.br_lookup[prefix].format(res)
+                css.append(f'.{escape_css_class_name(full_class)}{{{res}}}')
+            except ValueError:
+                pass
 
         return '\n'.join(css)
