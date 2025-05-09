@@ -34,29 +34,46 @@ class Tail:
             ('<percentage>', r'(\d+%)$', None),
         ]
 
-    def generate_inner_css(self, class_: str) -> str:
-        if class_ in self.lookup:
-            return self.lookup[class_]
+    def resolve_string(
+        self, string: str, lookup: dict[str, str]
+    ) -> str | None:
+        """
+        This function resolves a string wiat a pattern to output lookup table.
+
+        For example::
+
+            variables = { 'namespace': { 'key': 'value' } }
+            lookup = {
+                'special-in-<number>': 'special-out-<number>',
+                'var-in-<namespace>' -> 'var-out-<namespace>',
+            }
+
+            'special-in-123' -> 'special-out-123'
+            'special-in-nothing' -> None
+            'var-in-key' -> 'var-out-value'
+        """
+        if string in lookup:
+            return lookup[string]
 
         for key, regex, rep_keys in self.special:
-            if m := re.search(regex, class_):
-                lookup_class = re.sub(regex, key, class_)
-                if lookup_class in self.lookup:
+            if m := re.search(regex, string):
+                lookup_class = re.sub(regex, key, string)
+                if lookup_class in lookup:
                     if not rep_keys:
                         rep_keys = (key,)
-                    res = self.lookup[lookup_class]
+                    res = lookup[lookup_class]
                     for k in rep_keys:
                         res = res.replace(k, m.group(1))
                     return res
 
         for namespace, var_table in self.variables.items():
-            for lookup_key, template in self.lookup.items():
+            for lookup_key, template in lookup.items():
                 if namespace not in lookup_key:
                     continue
 
                 # A
                 my_regex = lookup_key.replace(namespace, r'(.*)')
-                m = re.match(my_regex, class_)
+                m = re.match(my_regex, string)
                 if not m:
                     continue
                 variable_nam = m.group(1)
@@ -68,6 +85,11 @@ class Tail:
                 #     if lookup_key.replace(namespace, val_name) == class_:
                 #         return template.replace(namespace, var_value)
 
+        return None
+
+    def generate_inner_css(self, class_: str) -> str:
+        if css := self.resolve_string(class_, self.lookup):
+            return css
         raise ValueError(f'class not valid: {class_}')
 
     def generate_css(self, *classes: str) -> str:
