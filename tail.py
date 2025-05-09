@@ -47,6 +47,9 @@ class Tail:
         elif '<number>' in self.lookup and (m := re.match(r'\d+', key)):
             val = m.group(0)
             return self.lookup['<number>'].replace('<number>', val)
+        elif '<percentage>' in self.lookup and (m := re.match(r'\d+%', key)):
+            val = m.group(0)
+            return self.lookup['<percentage>'].replace('<percentage>', val)
         else:
             for namespace, table in self.variables.items():
                 if namespace in self.lookup and key in table:
