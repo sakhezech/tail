@@ -17,11 +17,11 @@ class Tail:
     def __init__(
         self,
         lookup: dict[str, str],
-        br_lookup: dict[str, str],
+        variants: dict[str, str],
         variables: dict[str, dict[str, str]],
     ) -> None:
         self.lookup = lookup
-        self.br_lookup = br_lookup
+        self.variants = variants
         self.variables = variables
 
         self.special: list[tuple[str, str, tuple[str, ...] | None]] = [
@@ -92,6 +92,14 @@ class Tail:
             return css
         raise ValueError(f'class not valid: {class_}')
 
+    def apply_variants(self, css: str, prefixes: list[str]) -> str:
+        for prefix in reversed(prefixes):
+            template = self.resolve_string(prefix, self.variants)
+            if not template:
+                raise ValueError(f'no such prefix: {prefix}')
+            css = template.format(css)
+        return css
+
     def generate_css(self, *classes: str) -> str:
         css: list[str] = []
 
@@ -105,10 +113,8 @@ class Tail:
         for class_, full_class, prefixes in classes_:
             try:
                 inner = self.generate_inner_css(class_)
-                res = inner
-                for prefix in reversed(prefixes):
-                    res = self.br_lookup[prefix].format(res)
-                css.append(f'.{escape_css_class_name(full_class)}{{{res}}}')
+                outer = self.apply_variants(inner, prefixes)
+                css.append(f'.{escape_css_class_name(full_class)}{{{outer}}}')
             except ValueError:
                 pass
 
