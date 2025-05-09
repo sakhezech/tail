@@ -87,16 +87,14 @@ class Tail:
 
         return None
 
-    def generate_inner_css(self, class_: str) -> str:
-        if css := self.resolve_string(class_, self.patterns):
-            return css
-        raise ValueError(f'class not valid: {class_}')
+    def generate_inner_css(self, class_: str) -> str | None:
+        return self.resolve_string(class_, self.patterns)
 
-    def apply_variants(self, css: str, prefixes: list[str]) -> str:
+    def apply_variants(self, css: str, prefixes: list[str]) -> str | None:
         for prefix in reversed(prefixes):
             template = self.resolve_string(prefix, self.variants)
             if not template:
-                raise ValueError(f'no such prefix: {prefix}')
+                return None
             css = template.format(css)
         return css
 
@@ -111,11 +109,12 @@ class Tail:
         classes_.sort(key=lambda x: x)
 
         for class_, full_class, prefixes in classes_:
-            try:
-                inner = self.generate_inner_css(class_)
-                outer = self.apply_variants(inner, prefixes)
-                css.append(f'.{escape_css_class_name(full_class)}{{{outer}}}')
-            except ValueError:
-                pass
+            inner = self.generate_inner_css(class_)
+            if inner is None:
+                continue
+            outer = self.apply_variants(inner, prefixes)
+            if outer is None:
+                continue
+            css.append(f'.{escape_css_class_name(full_class)}{{{outer}}}')
 
         return '\n'.join(css)
