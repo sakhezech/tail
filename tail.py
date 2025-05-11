@@ -20,22 +20,79 @@ class Tail:
         variants: dict[str, str],
         variables: dict[str, dict[str, str]],
     ) -> None:
-        self.patterns = patterns
-        self.variants = variants
         self.variables = variables
-
-        self.special: list[tuple[str, str, tuple[str, ...] | None]] = [
+        self.variables_regexes = {
+            namespace: '|'.join(var_table.keys()).join(
+                (f'(?P{namespace}', ')')
+            )
+            for namespace, var_table in self.variables.items()
+        }
+        self.special = {
             # TODO: angle
-            ('[<value>]', r'\[(.*)\]$', ('<value>',)),
-            ('(<custom-property>)', r'\((.*)\)$', ('<custom-property>',)),
-            ('<ratio>', r'(\d+/\d+)$', None),
-            ('<fraction>', r'(\d+/\d+)$', None),
-            ('<number>', r'(\d+)$', ('<number>', '<value>')),
-            ('<percentage>', r'(\d+%)$', None),
-        ]
+            '<value>': r'\[(?P<value>.*)\]',
+            '<custom-property>': r'\((?P<custom-property>.*)\)',
+            '<ratio>': r'(?P<ratio>\d+/\d+)',
+            '<fraction>': r'(?P<fraction>\d+/\d+)',
+            '<number>': r'(?P<number>\d+)',
+            '<percentage>': r'(?P<percentage>\d+%)',
+        }
+
+        s, d = self.split_static_dynamic(patterns)
+        self.p_static, self.p_dynamic = s, d
+        s, d = self.split_static_dynamic(variants)
+        self.v_static, self.v_dynamic = s, d
+
+    def regexify(self, key: str) -> str:
+        """
+        Replaces <...>'s with their regexes.
+        """
+        regex = re.escape(key)
+        for key, regex_part in self.special.items():
+            regex = regex.replace(key, regex_part)
+        for key in self.variables.keys():
+            regex = regex.replace(key, self.variables_regexes[key])
+        return regex
+
+    def split_static_dynamic(
+        self, lookup: dict[str, str]
+    ) -> tuple[dict[str, str], dict[str, dict[str, str]]]:
+        static = {}
+        dynamic = {}
+        for key, template in lookup.items():
+            if '<' in key:
+                static_part, _, dynamic_part = key.partition('<')
+                dynamic_part = f'<{dynamic_part}'
+                dynamic.setdefault(static_part, {})
+                regex = self.regexify(dynamic_part)
+                dynamic[static_part][regex] = template
+            else:
+                static[key] = template
+        dynamic = {
+            key: dynamic[key]
+            for key in sorted(
+                dynamic.keys(), key=lambda x: len(x), reverse=True
+            )
+        }
+        return static, dynamic
+
+    def get_variable_value(self, namespace: str, key: str) -> str:
+        """
+        Gets the correct value depending on the namespace.
+
+        I.e. if the namespace is <number> or something like that we don't need
+          to retrieve the value, the key is the correct value; and if the
+          namespace is <color> we have to go get it.
+        """
+        if namespace in self.special:
+            return key
+        else:
+            return self.variables[namespace][key]
 
     def resolve_string(
-        self, string: str, lookup: dict[str, str]
+        self,
+        class_: str,
+        static: dict[str, str],
+        dynamic: dict[str, dict[str, str]],
     ) -> str | None:
         """
         This function resolves a string wiat a pattern to output lookup table.
@@ -43,56 +100,40 @@ class Tail:
         For example::
 
             variables = { 'namespace': { 'key': 'value' } }
-            lookup = {
+            patterns = {
                 'special-in-<number>': 'special-out-<number>',
-                'var-in-<namespace>' -> 'var-out-<namespace>',
+                'var-in-<namespace>': 'var-out-<namespace>',
             }
 
             'special-in-123' -> 'special-out-123'
             'special-in-nothing' -> None
             'var-in-key' -> 'var-out-value'
         """
-        if string in lookup:
-            return lookup[string]
+        if class_ in static:
+            return static[class_]
 
-        for key, regex, rep_keys in self.special:
-            if m := re.search(regex, string):
-                lookup_class = re.sub(regex, key, string)
-                if lookup_class in lookup:
-                    if not rep_keys:
-                        rep_keys = (key,)
-                    res = lookup[lookup_class]
-                    for k in rep_keys:
-                        res = res.replace(k, m.group(1))
-                    return res
-
-        for namespace, var_table in self.variables.items():
-            for lookup_key, template in lookup.items():
-                if namespace not in lookup_key:
-                    continue
-
-                # A
-                my_regex = lookup_key.replace(namespace, r'(.*)')
-                m = re.match(my_regex, string)
-                if not m:
-                    continue
-                variable_nam = m.group(1)
-                if variable_nam in var_table:
-                    return template.replace(namespace, var_table[variable_nam])
-
-                # B
-                # for val_name, var_value in var_table.items():
-                #     if lookup_key.replace(namespace, val_name) == class_:
-                #         return template.replace(namespace, var_value)
-
-        return None
+        for prefix, template_table in dynamic.items():
+            if not class_.startswith(prefix):
+                continue
+            dynamic_part = class_.removeprefix(prefix)
+            for regex, template in template_table.items():
+                if m := re.fullmatch(regex, dynamic_part):
+                    for namespace, var_key in m.groupdict().items():
+                        namespace = namespace.join('<>')
+                        template = template.replace(
+                            namespace,
+                            self.get_variable_value(namespace, var_key),
+                        )
+                    return template
 
     def generate_inner_css(self, class_: str) -> str | None:
-        return self.resolve_string(class_, self.patterns)
+        return self.resolve_string(class_, self.p_static, self.p_dynamic)
 
     def apply_variants(self, css: str, prefixes: list[str]) -> str | None:
         for prefix in reversed(prefixes):
-            template = self.resolve_string(prefix, self.variants)
+            template = self.resolve_string(
+                prefix, self.v_static, self.v_dynamic
+            )
             if not template:
                 return None
             css = template.format(css)
