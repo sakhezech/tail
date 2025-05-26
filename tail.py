@@ -60,8 +60,8 @@ class Tail:
         dynamic = {}
         for key, template in lookup.items():
             if '<' in key:
-                static_part, _, dynamic_part = key.partition('<')
-                dynamic_part = f'<{dynamic_part}'
+                i = key.find('<')
+                static_part, dynamic_part = key[:i], key[i:]
                 dynamic.setdefault(static_part, {})
                 regex = self.regexify(dynamic_part)
                 dynamic[static_part][regex] = template
